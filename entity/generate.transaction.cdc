@@ -1,13 +1,14 @@
 import Entity from "./entity.contract.cdc"
 
-transaction(entityAddress: Address) {
+transaction(targetAddress: Address) {
 
   let message: String
   let element: @Entity.Element?
 
   prepare(account: AuthAccount) {
     // use get PublicAccount instance by address
-    let generatorRef = getAccount(entityAddress)
+    
+    let targetGeneratorRef = getAccount(targetAddress)
       .getCapability<&Entity.Generator>(/public/ElementGenerator)
       .borrow()
       ?? panic("Couldn't borrow generator reference.")
@@ -19,16 +20,30 @@ transaction(entityAddress: Address) {
     )
 
     // save resource
-    self.element <- generatorRef.generate(feature: feature)
+    self.element <- targetGeneratorRef.generate(feature: feature)
+        
+    self.collectionRef = account.getCapability<&Entity.Collection>(/public/ElementCollection).borrow()
   }
 
   execute {
+
     if self.element == nil {
       log("Element of feature<".concat(self.message).concat("> already exists!"))
+
     } else {
-      log("Element generated")
+
+      if(self.collectionRef == nil) {
+        self.collection <- Entity.createCollection()
+        //Save it
+        account.save(<- self.collection, to: /storage/ElementCollection)
+        account.link<&Entity.Collection>(/public/ElementCollection, target: /storage/ElementCollection)
+
+
+      } 
+      self.collection.deposit(element: <- self.element!)
     }
 
-    destroy self.element
   }
+
+  
 }
